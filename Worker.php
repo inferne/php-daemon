@@ -25,12 +25,19 @@ class Worker
     
     public $block = true;
     
+    public $queuename = '.';
+    
     public function __construct() {
         $this->init();
     }
     
     public function init(){
-        $key = ftok(__FILE__, 'R');
+        do {
+            $this->queuename = __DIR__."/q".rand(100000,999999);
+        } while ( is_file($this->queuename) );
+        
+        touch($this->queuename);
+        $key = ftok($this->queuename, 'R');
         if(msg_queue_exists($key)){
             $this->queue = msg_get_queue($key, 0666);
             msg_remove_queue($this->queue);
@@ -216,6 +223,7 @@ class Worker
             }
         }
         msg_remove_queue($this->queue);//destory a message queue
+        unlink($this->queuename);
     }
     private $index = 0;
     
