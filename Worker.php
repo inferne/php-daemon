@@ -1,9 +1,12 @@
 <?php 
+
 /**
  * worker
  * @author liyunfei
- *
+ * 多进程类
  */
+
+include 'Queue.php';
  
 class Worker
 {
@@ -25,25 +28,13 @@ class Worker
     
     public $block = true;
     
-    public $queuename = '.';
-    
     public function __construct() {
         $this->init();
     }
     
     public function init(){
-        do {
-            $this->queuename = __DIR__."/q".rand(100000,999999);
-        } while ( is_file($this->queuename) );
-        
-        touch($this->queuename);
-        $key = ftok($this->queuename, 'R');
-        if(msg_queue_exists($key)){
-            $this->queue = msg_get_queue($key, 0666);
-            msg_remove_queue($this->queue);
-        }
-        $this->queue = msg_get_queue($key, 0666);
         //$this->log_file = 'Worker.log';
+        $this->queue = new Queue();
     }
     
     /**
@@ -155,27 +146,19 @@ class Worker
      */
     public function loop(){
         $pid = posix_getpid();
-        $flags = 0;
-        if(!$this->block){//设置非阻塞
-            $flags = MSG_IPC_NOWAIT;
-        }
         while (1){
-            $msgtype = '';
-            $message = '';
-            $errcode = 0;
-            //只接收msgtype=$pid的消息
-            if(msg_receive($this->queue, $pid, $msgtype, $this->max_size, $message, false, $flags, $errcode)){
-                //$this->log("receive $message strlen[".strlen($message).'] msgtype:'.$msgtype);
-                if(trim($message) == "exit()"){
-                    $this->log("process exit!");
-                    exit();
-                }else{
-                    call_user_func($this->onReceive, $this, $message);
-                }
-            }
+            $result = $this->queue->receive($pid);
+            $errcode = $result['code'];
             if($errcode > 0){
                 $this->log("receive errcode:".$errcode);
                 sleep(1);
+            }
+            $message = $result['msg'];
+            if(trim($message) == "exit()"){
+                $this->log("process exit!");
+                exit();
+            }else{
+                call_user_func($this->onReceive, $this, $message);
             }
             usleep(100);
         }
@@ -189,20 +172,13 @@ class Worker
      * @param int    $id
      */
     public function send($message, $id = -1){
-        //if($id == -1){
-        //    $i = sprintf("%u", crc32($message)) % $this->worker_num;
-        //}else{
-        //    $i = $id % $this->worker_num;
-        //}
         $i = $this->i % $this->worker_num;
         $this->i++;
         $j = 100;//最大重试次数
         do{
-            //$this->log("send ".$message);
-            $errcode = 0;
-            $result = @msg_send($this->queue, $this->arr_worker[$i], $message, false, $this->block, $errcode);
-            //send failed retry
-            if(!$result){
+            $result = $this->queue->send($this->arr_worker[$i], $message);
+            $errcode = $result['code'];
+            if($errcode > 0){
                 $this->log("send errcode:".$errcode);
                 sleep(1);
                 $j--;
@@ -216,14 +192,13 @@ class Worker
     public function stop(){
         foreach ($this->arr_worker as $pid){
             //发送消息类型为$pid的message
-            if(msg_send($this->queue, $pid, "exit()", false)){
+            if($this->queue->send($pid, "exit()", true)){
                 $pid = pcntl_wait($status);
                 $this->log("recover child process $pid");
                 unset($this->arr_worker[array_search($pid, $this->arr_worker)]);
             }
         }
-        msg_remove_queue($this->queue);//destory a message queue
-        unlink($this->queuename);
+        $this->queue->close();//close queue
     }
     private $index = 0;
     
