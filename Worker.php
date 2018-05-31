@@ -34,7 +34,9 @@ class Worker
     
     public function init(){
         //$this->log_file = 'Worker.log';
-        $this->queue = new Queue();
+        $this->queue = function(){
+            return new Queue();//延迟加载
+        };
     }
     
     /**
