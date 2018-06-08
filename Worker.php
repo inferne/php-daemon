@@ -7,7 +7,7 @@
  */
 
 include 'Queue.php';
- 
+
 class Worker
 {
     //worker process number
@@ -16,8 +16,8 @@ class Worker
     public $daemonize = false;
     //worker array
     public $arr_worker = array();
-    //sysvmsg queue
-    public $queue;
+    //linux ipc(can be is queue/pipe/socket)
+    public $ipc;
     public $onReceive;
     
     public $onStart;
@@ -34,9 +34,11 @@ class Worker
     
     public function init(){
         //$this->log_file = 'Worker.log';
-        $this->queue = function(){
-            return new Queue();//延迟加载
-        };
+        if(!$this->ipc){
+            $this->ipc = function(){
+                return new Queue();//延迟加载
+            };
+        }
     }
     
     /**
@@ -149,10 +151,10 @@ class Worker
     public function loop(){
         $pid = posix_getpid();
         while (1){
-            $result = $this->queue->receive($pid);
+            $result = $this->ipc->read($pid);
             $errcode = $result['code'];
             if($errcode > 0){
-                $this->log("receive errcode:".$errcode);
+                $this->log("read errcode:".$errcode);
                 sleep(1);
             }
             $message = $result['msg'];
@@ -178,10 +180,10 @@ class Worker
         $this->i++;
         $j = 100;//最大重试次数
         do{
-            $result = $this->queue->send($this->arr_worker[$i], $message);
+            $result = $this->ipc->write($this->arr_worker[$i], $message);
             $errcode = $result['code'];
             if($errcode > 0){
-                $this->log("send errcode:".$errcode);
+                $this->log("write errcode:".$errcode);
                 sleep(1);
                 $j--;
             }
@@ -194,13 +196,13 @@ class Worker
     public function stop(){
         foreach ($this->arr_worker as $pid){
             //发送消息类型为$pid的message
-            if($this->queue->send($pid, "exit()", true)){
+            if($this->ipc->write($pid, "exit()", true)){
                 $pid = pcntl_wait($status);
                 $this->log("recover child process $pid");
                 unset($this->arr_worker[array_search($pid, $this->arr_worker)]);
             }
         }
-        $this->queue->close();//close queue
+        $this->ipc->close();//close ipc
     }
     private $index = 0;
     

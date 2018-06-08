@@ -30,7 +30,7 @@ class Queue
         $this->queue = msg_get_queue($key, 0666);
     }
     
-    public function send($pid, $message, $block=''){
+    public function write($pid, $message, $block=''){
         if(!$block){
             $block = $this->block;
         }
@@ -40,7 +40,7 @@ class Queue
         return ['code' => $errcode, 'msg' => $result];
     }
     
-    public function receive($pid){
+    public function read($pid){
         $flags = 0;
         if(!$this->block){//设置非阻塞
             $flags = MSG_IPC_NOWAIT;
@@ -58,5 +58,9 @@ class Queue
     public function close(){
         msg_remove_queue($this->queue);//destory a message queue
         unlink($this->queuename);
+    }
+    
+    public function __destruct(){
+        $this->close();
     }
 }
