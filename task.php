@@ -4,10 +4,10 @@
  * @example php task.php xxx.json
  * $task_config = [
  *     [
- *         'root' => "",
+ *         'root' => "",//root dir
  *         'interval' => 1, 
  *         'cmd' => "sleep 100",
- *         'count' => 1,
+ *         'count' => 1,//start task count
  *     ],
  *     [
  *         'interval' => 1, 
@@ -15,74 +15,155 @@
  *         'count' => 1,
  *     ]
  * ];
- * @var Ambiguous $conf_file
  * @desc this is a daemon manager. when we have a task must always exec or interval less than 1min, because crontab min interval is 1min
  * so it is not good when we want less than 1min. 
  * @author liyunfei
  */
 
-if (system("ps -ef|grep -v '/bin/sh'|grep -v lockf|grep -v grep|grep ".$argv[0]."|wc -l") > 1){
-    exit('已经有任务在进行中');
-}
-
-$conf_file = isset($argv[1]) ? $argv[1] : 'task_config.json';
-
-function parseConfig($conf_file) 
+class Task
 {
-    $task_config = [];
-    switch (strrchr($conf_file, '.')) {
-        case '.ini':
-            $task_config = parse_ini_file($conf_file);
-            break;
-        case '.json':
-            $task_config = json_decode(file_get_contents($conf_file), 1);
-            break;
-        case '.xml':
-            echo "this old type not use!";
-            break;
-        default:
-            echo "error file type!";
-            break;
+    public static $pid = "task.pid";
+    
+    public static $daemonize = true;
+    
+    public static $arr_worker = [];
+    
+    public static $conf_file = "task_config.json";
+    
+    /**
+     * init php env
+     */
+    public static function init()
+    {
+        echo __FILE__;exit();
+        chdir(dirname(__FILE__));//change to file dirname
+        
+        $php = explode(" ", system("whereis -b php"));
+        if (!$php[1]) {
+            echo "php is not found!";
+        } else {
+            $path = getenv("PATH");
+            putenv("PATH=".$path.":".dirname($php[1]));
+        }
+        
+        if (@file_get_contents(self::$pid)) {
+            global $argv;
+            if (system("ps -ef|grep -v '/bin/sh'|grep -v lockf|grep -v grep|grep '".$argv[0]."'|wc -l") > 1){
+                exit('已经有任务在进行中');
+            }
+        }
+        
+        file_put_contents(self::$pid, posix_getpid());
     }
     
-    return $task_config;
-}
-
-// $root = dirname(dirname(__DIR__));
-
-// chdir($root);
-
-$arr_worker = [];
-
-while (1) {
-    $task_config = parseConfig($conf_file);//简单的热加载
-    if (!$task_config) {
-        sleep(1);
-        continue;
+    /**
+     * run all task
+     */
+    public static function run()
+    {
+        self::init();
+        self::daemonize();
+        while (1) {
+            //简单的热加载
+            $task_config = self::parseConfig();
+            if (!$task_config) {
+                sleep(1);
+                continue;
+            }
+            //执行任务
+            foreach ($task_config as $task) {
+                self::exec($task);
+            }
+            self::exec($task_config);
+            //回收任务占用的资源
+            self::wait();
+            //echo "1\n";
+            sleep(1);
+        }
     }
     
-    foreach ($task_config as $task) {
+    /**
+     * Run as deamon mode.
+     * copy from workerman
+     * @throws Exception
+     */
+    public static function daemonize()
+    {
+        if(!self::$daemonize){
+            return 1;
+        }
+        umask(0);
+        $pid = pcntl_fork();
+        if($pid === -1){
+            throw new Exception("fork error!");
+        }else if($pid > 0){
+            exit(0);
+        }
+        if (-1 === posix_setsid()) {
+            throw new Exception("setsid fail");
+        }
+        // Fork again avoid SVR4 system regain the control of terminal.
+        if($pid === -1){
+            throw new Exception("fork error!");
+        }else if($pid > 0){
+            exit(0);
+        }
+    }
+    
+    /**
+     * parse config
+     * @param unknown $conf_file
+     * @return array|mixed
+     */
+    public static function parseConfig()
+    {
+        $conf_file = self::$conf_file;
+        $task_config = [];
+        switch (strrchr($conf_file, '.')) {
+            case '.ini':
+                $task_config = parse_ini_file($conf_file);
+                break;
+            case '.json':
+                $task_config = json_decode(file_get_contents($conf_file), 1);
+                break;
+            case '.xml':
+                echo "this old type not use!";
+                break;
+            default:
+                echo "error file type!";
+                break;
+        }
+        
+        return $task_config;
+    }
+    
+    /**
+     * exec task
+     * @param unknown $task_config
+     */
+    public static function exec($task)
+    {
         //没有任务则跳过
         if (!isset($task['cmd']) || $task['cmd'] == '') {
-            continue;
+            return 1;
         }
         
         $tk = md5($task['cmd']);
         
         //判断时间间隔
-        if (isset($task['interval']) && isset($arr_worker[$tk]['time']) && time() - $arr_worker[$tk]['time'] < $task['interval']) {
-            continue;
+        if (isset($task['interval']) && isset(self::$arr_worker[$tk]['time']) && time() - self::$arr_worker[$tk]['time'] < $task['interval']) {
+            return 1;
         }
         
-        if (!isset($arr_worker[$tk])) {
-            $arr_worker[$tk] = [];
-            $arr_worker[$tk]['cnt'] = 0;
+        if (!isset(self::$arr_worker[$tk])) {
+            self::$arr_worker[$tk] = [];
+            self::$arr_worker[$tk]['cnt'] = 0;
         }
         
-        if ($arr_worker[$tk]['cnt'] < $task['count']) {
-            $cnt = $task['count'] - $arr_worker[$tk]['cnt'];//计算还需启动的任务数量
+        if (self::$arr_worker[$tk]['cnt'] < $task['count']) {
+            $cnt = $task['count'] - self::$arr_worker[$tk]['cnt'];//计算还需启动的任务数量
         } else {//有足够的任务在运行则不再启动任务
-            continue;
+            return 1;
         }
         /* 启动任务 */
         for ($i = 0; $i < $cnt; $i++) {
@@ -98,21 +179,26 @@ while (1) {
             } elseif ($pid == -1) {
                 echo "fork error!";
             } else {
-                $arr_worker[$tk]['pid'][] = $pid;
-                $arr_worker[$tk]['cnt'] += 1;
-                $arr_worker[$tk]['time'] = time();
+                self::$arr_worker[$tk]['pid'][] = $pid;
+                self::$arr_worker[$tk]['cnt'] += 1;
+                self::$arr_worker[$tk]['time'] = time();
             }
         }
     }
     
-    //回收执行完成的任务
-    while ( ($pid = pcntl_wait($status, WNOHANG)) > 0 ) {
-        foreach ($arr_worker as $key => $worker) {
-            if (in_array($pid, $worker['pid'])) {
-                $arr_worker[$key]['cnt'] -= 1;
+    /**
+     * 回收任务
+     */
+    public static function wait()
+    {
+        while ( ($pid = pcntl_wait($status, WNOHANG)) > 0 ) {
+            foreach (self::$arr_worker as $key => $worker) {
+                if (in_array($pid, $worker['pid'])) {
+                    self::$arr_worker[$key]['cnt'] -= 1;
+                }
             }
         }
     }
-    //echo "1\n";
-    sleep(1);
 }
+
+Task::run();

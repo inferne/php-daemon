@@ -1,0 +1,13 @@
+[
+    {
+        "root" : "",
+        "interval" : 1,
+        "cmd" : "sleep 100",
+        "count" : 1
+    },
+    {
+        "interval" : 1, 
+        "cmd" : "sleep 120",
+        "count" : 1
+    }
+]
