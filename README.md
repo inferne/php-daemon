@@ -1,4 +1,4 @@
-# 多进程类 -- Worker.php
+## 多进程类 -- Worker.php
 
 依赖拓展<br/>
 pcntl<br/>
@@ -6,7 +6,7 @@ posix<br/>
 sysvmsg<br/>
 
 进程间使用sysvmsg进行通讯<br/>
-## Worker.php
+### Worker.php
 1. 支持的参数
    * -c <number>    worker number
    * -d             daemonize
@@ -37,7 +37,7 @@ sysvmsg<br/>
    * stop()
       * worker recyce child process
 
-## demo1
+### demo1
 
 假如你有一个队列，此示例适用于快速消费掉一个队列
 ```php
@@ -62,7 +62,7 @@ foreach ($data as $key => $value){
 
 $worker->stop();
 ```
-## demo2
+### demo2
 
 假如你有一个消费脚本来消费队列里面的任务，此示例可以简单的把你的脚本变成多进程版，当前脚本无需任何修改
 ```php
@@ -83,10 +83,10 @@ $worker->run();
 $worker->stop();
 ```
 
-# 全局计数器 -- Counter.php
+## 全局计数器 -- Counter.php
 
 假如你需要在多个进程的运行环境中使用一个全局计数器，那么这个可以满足你
-## 性能测试
+### 性能测试
 ```php
  * 1000000 times incr
  * real	0m8.636s
@@ -95,10 +95,13 @@ $worker->stop();
 ```
 每秒自增操作10w+，可以满足大部分使用场景
 
-# 任务管理器 -- Task.php
+## 任务管理器 -- Task.php
 
 一个任务管理工具，假如crontab无法满足你，可以试试这个，也可以当作daemon程序的进程管理工具
-只需按下面规则配置json文件即可
+
+### 如何使用
+
+只需按下面规则配置json文件，然后启动任务管理器即可
 ```php
 [
     {//第一个任务
@@ -111,4 +114,8 @@ $worker->stop();
         ...
     }
 ]
+```
+启动
+```php
+php task.php
 ```
