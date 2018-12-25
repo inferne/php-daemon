@@ -22,8 +22,6 @@
 
 class Task
 {
-    public static $pid = "task.pid";
-    
     public static $daemonize = true;
     
     public static $arr_worker = [];
@@ -35,7 +33,6 @@ class Task
      */
     public static function init()
     {
-        echo __FILE__;exit();
         chdir(dirname(__FILE__));//change to file dirname
         
         $php = explode(" ", system("whereis -b php"));
@@ -45,15 +42,6 @@ class Task
             $path = getenv("PATH");
             putenv("PATH=".$path.":".dirname($php[1]));
         }
-        
-        if (@file_get_contents(self::$pid)) {
-            global $argv;
-            if (system("ps -ef|grep -v '/bin/sh'|grep -v lockf|grep -v grep|grep '".$argv[0]."'|wc -l") > 1){
-                exit('已经有任务在进行中');
-            }
-        }
-        
-        file_put_contents(self::$pid, posix_getpid());
     }
     
     /**
@@ -64,6 +52,7 @@ class Task
         self::init();
         self::daemonize();
         while (1) {
+            echo "\n-----------------------start------------------------\n";
             //简单的热加载
             $task_config = self::parseConfig();
             if (!$task_config) {
@@ -74,9 +63,9 @@ class Task
             foreach ($task_config as $task) {
                 self::exec($task);
             }
-            self::exec($task_config);
             //回收任务占用的资源
             self::wait();
+            echo "\n-----------------------stop------------------------\n";
             //echo "1\n";
             sleep(1);
         }
@@ -148,7 +137,7 @@ class Task
             return 1;
         }
         
-        $tk = md5($task['cmd']);
+        $tk = substr(md5($task['cmd']), 8, 16);
         
         //判断时间间隔
         if (isset($task['interval']) && isset(self::$arr_worker[$tk]['time']) && time() - self::$arr_worker[$tk]['time'] < $task['interval']) {
@@ -165,21 +154,23 @@ class Task
         } else {//有足够的任务在运行则不再启动任务
             return 1;
         }
+        //print_r(self::$arr_worker);
         /* 启动任务 */
         for ($i = 0; $i < $cnt; $i++) {
             $pid = pcntl_fork();
-            echo $pid."\n";
+            //echo $pid."\n";
             if ( $pid == 0) {//error
                 //检查是否切换目录
-                if (isset($task['root'])) {
+                if (isset($task['root']) && $task['root']) {
                     chdir($task['root']);
                 }
                 //echo $task['cmd']."\n";
                 system($task['cmd']);
+                exit();
             } elseif ($pid == -1) {
                 echo "fork error!";
             } else {
-                self::$arr_worker[$tk]['pid'][] = $pid;
+                self::$arr_worker[$tk]['pid'][$pid] = $pid;
                 self::$arr_worker[$tk]['cnt'] += 1;
                 self::$arr_worker[$tk]['time'] = time();
             }
@@ -193,12 +184,12 @@ class Task
     {
         while ( ($pid = pcntl_wait($status, WNOHANG)) > 0 ) {
             foreach (self::$arr_worker as $key => $worker) {
-                if (in_array($pid, $worker['pid'])) {
+                if (isset($worker['pid'][$pid])) {
                     self::$arr_worker[$key]['cnt'] -= 1;
                 }
             }
         }
     }
 }
-
+//启动task manager
 Task::run();
