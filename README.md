@@ -1,4 +1,4 @@
-# 多进程类
+# 多进程类 -- Worker.php
 
 依赖拓展<br/>
 pcntl<br/>
@@ -81,4 +81,34 @@ $worker->onStart = function(Worker $fd){
 $worker->run();
 
 $worker->stop();
+```
+
+# 全局计数器 -- Counter.php
+
+假如你需要在多个进程的运行环境中使用一个全局计数器，那么这个可以满足你
+## 性能测试
+```php
+ * 1000000 times incr
+ * real	0m8.636s
+ * user	0m6.868s
+ * sys	0m1.771s
+```
+每秒自增操作10w+，可以满足大部分使用场景
+
+# 任务管理器 -- Task.php
+
+一个任务管理工具，假如crontab无法满足你，可以试试这个，也可以当作daemon程序的进程管理工具
+只需按下面规则配置json文件即可
+```php
+[
+    {//第一个任务
+        "root" : "",//任务执行的目录
+        "interval" : 1,//任务执行的时间间隔
+        "cmd" : "sleep 100",//执行的命令
+        "count" : 1//启动相同进程的数量
+    },
+    {//第二个任务
+        ...
+    }
+]
 ```
