@@ -91,7 +91,7 @@ class TimerWheel
                             //有进位则把前面的指针都置为零
                             foreach ($tk as $k => &$v) {
                                 if (isset($fields[$k]['f'])) {
-                                    $fields[$k][0] = 0;
+                                    $fields[$k][0] = ($d + $fields[$k]['f']) % $this->ary[$k];
                                 } else {
                                     $v = 0;
                                 }
@@ -109,7 +109,7 @@ class TimerWheel
                         //有进位则把前面的指针都置为零
                         foreach ($tk as $k => &$v) {
                             if (isset($fields[$k]['f'])) {
-                                $fields[$k][0] = 0;
+                                $fields[$k][0] = ($d + $fields[$k]['f']) % $this->ary[$k];
                             } else {
                                 $v = 0;
                             }
@@ -127,7 +127,7 @@ class TimerWheel
                     //有进位则把前面的指针都置为零
                     foreach ($tk as $k => &$v) {
                         if (isset($fields[$k]['f'])) {
-                            $fields[$k][0] = 0;
+                            $fields[$k][0] = ($d + $fields[$k]['f']) % $this->ary[$k];
                         } else {
                             $v = 0;
                         }
@@ -145,8 +145,8 @@ class TimerWheel
         }
         //按照指针数组合成最近执行时间
         $datetime = $year."-".$fields[4][$tk[4]]."-".$fields[3][$tk[3]]." ".$fields[2][$tk[2]].":".$fields[1][$tk[1]].":".$fields[0][$tk[0]];
-
-        $this->printLog(__FUNCTION__." ".$frequency." => ".$datetime);
+        
+        $this->printLog(__FUNCTION__." ".date("Y-m-d H:i:s")." ".$frequency." => ".$datetime);
         return (int)((strtotime($datetime) - (time() - $this->uJiffies))); //定时器到期时间
     }
     
@@ -179,7 +179,7 @@ class TimerWheel
      * @param unknown $task
      */
     public function addTask($task)
-    {   
+    {
         $id = $task['id'];
         
         $uExpires = $task['uExpires']; //距离定时器到期时间
@@ -208,7 +208,7 @@ class TimerWheel
             $this->arrTask[$id][1] = 4;
         }
         $this->arrTask[$id][2] = $i; //轮中的槽
-        $this->printLog(__FUNCTION__." ".json_encode($this->arrTask[$id]));
+        $this->printLog(__FUNCTION__." ".json_encode($this->arrTask[$id])." ".$uDueTime);
         //echo __FUNCTION__." ".json_encode($this->arrTask[$id])."\n";
     }
     
@@ -244,12 +244,12 @@ class TimerWheel
             $i = $this->uJiffies >> ($this->tvrBits + $this->tvnBits * ($lv) - 1);
         }
         
-        if ($i > 0 && 0 == $i % $this->tvnMask) { //判断时间进位
+        if ($i > 0 && 0 == $i % $this->tvnSize) { //判断时间进位
             $this->cascadeTask(++$lv);
         }
         
-        $i %= $this->tvnMask;
-        
+        $i %=  $this->tvnSize;
+        $this->printLog("lv=".$lv." i=".$i);
         foreach ($this->timerManager[$lv][$i] as $id => $task) {
             unset($this->timerManager[$lv][$i][$id]);
             $this->addTask($task);
@@ -262,9 +262,10 @@ class TimerWheel
         $now = time();
         //$now = $this->lastTime+1;
         if ($this->lastTime != $now) {
-            $this->printLog("++++++++++++++++++++++++++++begin getTask++++++++++++++++++++++++++++");
+            //$this->printLog("++++++++++++++++++++++++++++begin getTask++++++++++++++++++++++++++++");
             while ($this->lastTime != $now) { //避免程序执行产生的时间误差导致跳过>1秒
-                if ($this->uJiffies != 0 && ($this->uJiffies % $this->tvrMask) == 0) {
+                if ($this->uJiffies != 0 && ($this->uJiffies % $this->tvrSize) == 0) {
+                    $this->printLog("jiff=".$this->uJiffies);
                     $this->cascadeTask(1);
                 }
                 
@@ -272,11 +273,11 @@ class TimerWheel
                 $this->uJiffies++; //瞬间时间++
                 $this->lastTime++;
                 foreach ($taskList as $task) {
-                    $this->printLog(__FUNCTION__." ".json_encode($task));
+                    $this->printLog(__FUNCTION__." ".json_encode($task)." ".($this->uJiffies-1));
                     $this->updateTask($task['id']);
                 }
             }
-            $this->printLog("+++++++++++++++++++++++++++++end getTask+++++++++++++++++++++++++++++");
+            //$this->printLog("+++++++++++++++++++++++++++++end getTask+++++++++++++++++++++++++++++");
         }
         return $taskList;
     }
@@ -291,7 +292,7 @@ class TimerWheel
         if (is_array($msg)) {
             $msg = json_encode($msg);
         }
-        $msg = date("Y-m-d H:i:s")." ".$msg."\n";
+        $msg = date("Y-m-d H:i:s")." ".posix_getpid()." ".$msg."\n";
         if ($this->logFile) {
             file_put_contents($this->logFile, $msg, FILE_APPEND | LOCK_EX);
         } else {
