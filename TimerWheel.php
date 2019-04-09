@@ -245,7 +245,7 @@ class TimerWheel
         }
         
         if ($i > 0 && 0 == $i % $this->tvnSize) { //判断时间进位
-            $this->cascadeTask($lv++);
+            $this->cascadeTask($lv+1);
         }
         
         $i %=  $this->tvnSize;
