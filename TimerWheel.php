@@ -91,7 +91,7 @@ class TimerWheel
                             //有进位则把前面的指针都置为零
                             foreach ($tk as $k => &$v) {
                                 if (isset($fields[$k]['f'])) {
-                                    $fields[$k][0] = ($d + $fields[$k]['f']) % $this->ary[$k];
+                                    $fields[$k][0] = (date($this->fc[$k]) + $fields[$k]['f']) % $this->ary[$k];
                                 } else {
                                     $v = 0;
                                 }
@@ -109,7 +109,7 @@ class TimerWheel
                         //有进位则把前面的指针都置为零
                         foreach ($tk as $k => &$v) {
                             if (isset($fields[$k]['f'])) {
-                                $fields[$k][0] = ($d + $fields[$k]['f']) % $this->ary[$k];
+                                $fields[$k][0] = (date($this->fc[$k]) + $fields[$k]['f']) % $this->ary[$k];
                             } else {
                                 $v = 0;
                             }
@@ -127,7 +127,7 @@ class TimerWheel
                     //有进位则把前面的指针都置为零
                     foreach ($tk as $k => &$v) {
                         if (isset($fields[$k]['f'])) {
-                            $fields[$k][0] = ($d + $fields[$k]['f']) % $this->ary[$k];
+                            $fields[$k][0] = (date($this->fc[$k]) + $fields[$k]['f']) % $this->ary[$k];
                         } else {
                             $v = 0;
                         }
